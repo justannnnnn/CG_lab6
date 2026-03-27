@@ -49,24 +49,29 @@ void main() {
 
     // --------- RAIN ---------
     else if(uEffectType == 2) {
-        float localTime = uTime - aStartTime;
+        float speed = -aVelocity.y * 1.5;
 
-        // если ещё не "родилась" капля — не рисуем
-        if(localTime < 0.0) {
-            gl_Position = vec4(0.0);
-            gl_PointSize = 0.0;
-            vLife = 0.0;
-            return;
-        }
+        // движение вниз (на основе времени)
+        vec3 pos = aPosition;
 
-        pos.y += aVelocity.y * localTime;
+        pos.y += aVelocity.y * uTime;
+        pos.x += aVelocity.x * uTime;
+        pos.z += aVelocity.z * uTime;
 
-        // бесконечный дождь (перезапуск капли)
-        float resetHeight = 20.0;
-        float fallDistance = mod(-pos.y, resetHeight);
-        pos.y = resetHeight - fallDistance;
+        float height = 10.0;
 
-        size = 6.0;
+        // КЛЮЧ: индивидуальный цикл каждой капли
+        float offset = fract(aPosition.y / height);
+
+        pos.y = mod(pos.y - uTime * speed + offset * height, height);
+
+        // ветер (постоянный, но НЕ синхронный)
+        pos.x += sin(aPosition.y * 10.0 + uTime) * 0.2;
+
+        // перспектива
+        float depth = clamp(1.0 - (aPosition.y / height), 0.3, 1.0);
+
+        size = (1.2 + speed * 0.3) * depth;
     }
 
     // --------- SPARKLER ---------
@@ -125,7 +130,21 @@ void main() {
         color = vec4(1.0, 1.0, 1.0, finalAlpha * 0.3);
     } 
     else if(uEffectType == 2) {
-        color = vec4(0.5, 0.7, 1.0, finalAlpha);
+        float streak = smoothstep(0.8, 0.0, vLife);
+
+        vec3 base = vec3(0.55, 0.65, 1.0);
+
+        // мокрый блеск
+        vec3 highlight = vec3(0.9, 0.95, 1.0);
+
+        vec3 colorMix = mix(base, highlight, streak);
+
+        // лёгкий glow как в кино
+        float glow = 1.2;
+        float groundFade = smoothstep(0.0, 2.0, vLife);
+        finalAlpha *= groundFade;
+
+        color = vec4(colorMix, finalAlpha * 0.8 * glow);
     } 
     else if(uEffectType == 3) {
         float glow = 1.5;
@@ -233,18 +252,18 @@ class ParticleSystem {
 
                 this.lifes[i] = Math.random() * 3 + 2;
             } else if(type === "rain") {
-                this.positions[i*3+0] = (Math.random() - 0.5) * 20;
-                this.positions[i*3+1] = Math.random() * 20;
-                this.positions[i*3+2] = (Math.random() - 0.5) * 20;
+                // широкий объём дождя (3D "стена")
+                this.positions[i*3+0] = (Math.random() - 0.5) * 25;
+                this.positions[i*3+1] = Math.random() * 15;
+                this.positions[i*3+2] = (Math.random() - 0.5) * 25;
 
-                this.velocities[i*3+0] = 0;
-                this.velocities[i*3+1] = -10 - Math.random() * 5;
-                this.velocities[i*3+2] = 0;
+                // диагональный ветер
+                this.velocities[i*3+0] = (Math.random() - 0.5) * 1.5;
+                this.velocities[i*3+1] = - (Math.random() * 10 + 8);
+                this.velocities[i*3+2] = (Math.random() - 0.5) * 1.0;
 
-                // 👉 ключевой момент: случайный "момент рождения"
-                this.startTimes[i] = Math.random() * 5.0;
-
-                this.lifes[i] = 1000;
+                // “долгая жизнь” капель
+                this.lifes[i] = 9999;
             } else if(type === "sparkler") {
                 this.startTimes[i] = Math.random() * 2.0;
 
