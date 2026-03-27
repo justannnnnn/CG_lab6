@@ -1,6 +1,5 @@
 import { mat4 } from "https://cdn.jsdelivr.net/npm/gl-matrix@3.4.3/esm/index.js";
 
-// Получаем canvas и создаем контекст WebGL2
 const canvas = document.getElementById('glcanvas');
 const gl = canvas.getContext('webgl2');
 
@@ -8,13 +7,11 @@ if (!gl) {
     alert('WebGL2 не поддерживается в этом браузере.');
 }
 
-// Настройки сцены
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 gl.viewport(0, 0, canvas.width, canvas.height);
 gl.clearColor(0, 0, 0, 1);
 
-// ----------------- Шейдеры -----------------
 const vertexShaderSrc = `#version 300 es
 precision highp float;
 
@@ -35,23 +32,22 @@ void main() {
     float life = aLife - t;
     float size = 3.0;
 
-    // --------- FIREWORK ---------
+    // FIREWORK
     if(uEffectType == 0) {
         pos.y -= 3.0 * uTime * uTime;
         size = 3.0 + 2.0 * life;
     }
 
-    // --------- SMOKE ---------
+    // SMOKE
     else if(uEffectType == 1) {
-        pos.x += sin(uTime + aPosition.x) * 0.5; // турбулентность
+        pos.x += sin(uTime + aPosition.x) * 0.5;
         size = 10.0 + (1.0 - life) * 25.0;
     }
 
-    // --------- RAIN ---------
+    // RAIN
     else if(uEffectType == 2) {
         float speed = -aVelocity.y * 1.5;
 
-        // движение вниз (на основе времени)
         vec3 pos = aPosition;
 
         pos.y += aVelocity.y * uTime;
@@ -59,22 +55,17 @@ void main() {
         pos.z += aVelocity.z * uTime;
 
         float height = 10.0;
-
-        // КЛЮЧ: индивидуальный цикл каждой капли
         float offset = fract(aPosition.y / height);
 
         pos.y = mod(pos.y - uTime * speed + offset * height, height);
-
-        // ветер (постоянный, но НЕ синхронный)
         pos.x += sin(aPosition.y * 10.0 + uTime) * 0.2;
 
-        // перспектива
         float depth = clamp(1.0 - (aPosition.y / height), 0.3, 1.0);
 
         size = (1.2 + speed * 0.3) * depth;
     }
 
-    // --------- SPARKLER ---------
+    // SPARKLER
     else if(uEffectType == 3) {
 
         float localTime = uTime - aStartTime;
@@ -93,7 +84,7 @@ void main() {
         size = (2.0 + 2.0 * life) * (1.0 + trailFade);
     }
 
-    // --------- CLOUDS ---------
+    // CLOUDS
     else if(uEffectType == 4) {
         float t = uTime;
 
@@ -128,51 +119,47 @@ void main() {
 
     vec4 color;
 
+    // FIREWORK
     if(uEffectType == 0) {
         color = vec4(1.0, 0.5, 0.2, finalAlpha);
     } 
+    // SMOKE
     else if(uEffectType == 1) {
         color = vec4(1.0, 1.0, 1.0, finalAlpha * 0.3);
     } 
+    // RAIN
     else if(uEffectType == 2) {
         float streak = smoothstep(0.8, 0.0, vLife);
 
         vec3 base = vec3(0.55, 0.65, 1.0);
-
-        // мокрый блеск
         vec3 highlight = vec3(0.9, 0.95, 1.0);
-
         vec3 colorMix = mix(base, highlight, streak);
 
-        // лёгкий glow как в кино
         float glow = 1.2;
         float groundFade = smoothstep(0.0, 2.0, vLife);
         finalAlpha *= groundFade;
 
         color = vec4(colorMix, finalAlpha * 0.8 * glow);
-    } 
+    }
+    // SPARKLER 
     else if(uEffectType == 3) {
         float glow = 1.5;
         color = vec4(1.0, 0.8, 0.3, finalAlpha * glow);
     }
+    // CLOUDS
     else if(uEffectType == 4) {
         vec2 uv = gl_PointCoord - 0.5;
         float d = length(uv);
-
-        // базовая форма точки
         float core = exp(-d * d * 6.0);
 
-        // ВАЖНО: определяем "край"
         float edge = smoothstep(0.35, 0.0, d);
 
-        // усиливаем край (чтобы он был ярче и крупнее)
         float edgeGlow = (1.0 - core) * edge;
 
         float alpha = finalAlpha * (core * 0.4 + edgeGlow * 0.9);
 
         vec3 baseColor = vec3(1.0);
 
-        // края ярче и “воздушнее”
         vec3 colorMix = baseColor + edgeGlow * vec3(0.2, 0.25, 0.3);
         alpha *= 1.2;
         alpha = clamp(alpha, 0.0, 1.0);
@@ -190,7 +177,6 @@ void main() {
 }
 `;
 
-// ----------------- Компиляция шейдеров -----------------
 function compileShader(src, type) {
     const shader = gl.createShader(type);
     gl.shaderSource(shader, src);
@@ -213,7 +199,6 @@ if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
 }
 gl.useProgram(program);
 
-// ✅ Получаем uniform location
 const uTimeLocation = gl.getUniformLocation(program, 'uTime');
 const uProjectionLocation = gl.getUniformLocation(program, 'uProjection');
 
@@ -231,12 +216,11 @@ window.addEventListener("keydown", (e)=>{
         currentEffect = effects[effectIndex];
         particleSystem.initEffect(currentEffect);
         particleSystem.updateBuffers();
-        startTime = performance.now(); // сброс времени
+        startTime = performance.now();
     }
 });
 const uEffectTypeLocation = gl.getUniformLocation(program, 'uEffectType');
 
-// ----------------- Система частиц -----------------
 class ParticleSystem {
     constructor(maxParticles) {
         this.maxParticles = maxParticles;
@@ -244,6 +228,7 @@ class ParticleSystem {
         this.velocities = new Float32Array(maxParticles * 3);
         this.lifes = new Float32Array(maxParticles);
         this.startTimes = new Float32Array(maxParticles);
+        this.activeParticles = 0;
         
         this.startBuffer = gl.createBuffer();
         this.posBuffer = gl.createBuffer();
@@ -252,11 +237,24 @@ class ParticleSystem {
     }
 
     initEffect(type) {
-        for (let i = 0; i < this.maxParticles; i++) {
+        let count = this.maxParticles;
+        if(type === "clouds") {
+            count = 3000;
+        } else if(type === "rain") {
+            count = 40000;
+        } else if(type === "smoke") {
+            count = 50000;
+        } else if(type === "sparkler") {
+            count = 50000;
+        } else if(type === "firework") {
+            count = 10000;
+        }
+        this.activeParticles = count;
+        for (let i = 0; i < this.activeParticles; i++) {
             if(type === "firework") {
-                this.positions[i*3+0] = 0;
-                this.positions[i*3+1] = 0;
-                this.positions[i*3+2] = 0;
+                this.positions[i*3+0] = 1;
+                this.positions[i*3+1] = 5;
+                this.positions[i*3+2] = 2;
 
                 let angle = Math.random() * Math.PI/2 - Math.PI/4; 
                 let radiusAngle = Math.random() * 2 * Math.PI;
@@ -268,9 +266,9 @@ class ParticleSystem {
 
                 this.lifes[i] = Math.random() * 2 + 1;
             } else if(type === "smoke") {
-                this.positions[i*3+0] = (Math.random()-0.5) * 5;
+                this.positions[i*3+0] = (Math.random()-0.5) * 2;
                 this.positions[i*3+1] = 0;
-                this.positions[i*3+2] = (Math.random()-0.5) * 5;
+                this.positions[i*3+2] = (Math.random()-0.5) * 2;
 
                 this.velocities[i*3+0] = (Math.random()-0.5) * 0.2;
                 this.velocities[i*3+1] = Math.random() * 0.5 + 0.2;
@@ -278,17 +276,14 @@ class ParticleSystem {
 
                 this.lifes[i] = Math.random() * 3 + 2;
             } else if(type === "rain") {
-                // широкий объём дождя (3D "стена")
                 this.positions[i*3+0] = (Math.random() - 0.5) * 25;
                 this.positions[i*3+1] = Math.random() * 15;
                 this.positions[i*3+2] = (Math.random() - 0.5) * 25;
 
-                // диагональный ветер
                 this.velocities[i*3+0] = (Math.random() - 0.5) * 1.5;
                 this.velocities[i*3+1] = - (Math.random() * 10 + 8);
                 this.velocities[i*3+2] = (Math.random() - 0.5) * 1.0;
 
-                // “долгая жизнь” капель
                 this.lifes[i] = 9999;
             } else if(type === "sparkler") {
                 this.startTimes[i] = Math.random() * 2.0;
@@ -306,16 +301,13 @@ class ParticleSystem {
                 this.velocities[i*3+2] = Math.sin(spread) * Math.sin(angle) * speed;
 
                 this.lifes[i] = Math.random() * 1.2 + 0.8;
-            } else if(type === "clouds") {
-                // центр одного большого облака
-                const cx = -10 + Math.random() * 5; // старт слева (чуть за экраном)
+            } else if(type === "clouds") {а
+                const cx = -10 + Math.random() * 5;
                 const cy = 8.5;
                 const cz = 0;
 
-                // плотность облака (важно: "ком" через гауссиану)
                 const r = () => (Math.random() + Math.random() + Math.random()) / 3;
 
-                // вытягиваем облако в "каплю"
                 const x = (r() - 0.5) * 10;
                 const y = (r() - 0.5) * 4;
                 const z = (r() - 0.5) * 2;
@@ -324,8 +316,7 @@ class ParticleSystem {
                 this.positions[i*3+1] = cy + y;
                 this.positions[i*3+2] = cz + z;
 
-                // единое движение облака
-                this.velocities[i*3+0] = 0.35; // строго слева направо
+                this.velocities[i*3+0] = 0.35;
                 this.velocities[i*3+1] = 0;
                 this.velocities[i*3+2] = 0;
 
@@ -366,16 +357,14 @@ class ParticleSystem {
         gl.uniformMatrix4fv(uProjectionLocation, false, projection);
         gl.uniform1i(uEffectTypeLocation, effectType);
 
-        gl.drawArrays(gl.POINTS, 0, this.maxParticles);
+        gl.drawArrays(gl.POINTS, 0, this.activeParticles);
     }
 }
 
-// ----------------- Инициализация -----------------
-const particleSystem = new ParticleSystem(5000);
+const particleSystem = new ParticleSystem(100000);
 particleSystem.initEffect("firework");
 particleSystem.updateBuffers();
 
-// ----------------- Основной рендер -----------------
 let startTime = performance.now();
 function render() {
     let currentTime = (performance.now() - startTime) / 1000;
