@@ -95,7 +95,12 @@ void main() {
 
     // --------- CLOUDS ---------
     else if(uEffectType == 4) {
-        size = 20.0;
+        float t = uTime;
+
+        pos.x += aVelocity.x * t;
+        pos.y += sin(aPosition.x * 0.2 + t * 0.5) * 0.3;
+
+        size = 60.0 + 100.0 * (0.5 + 0.5 * sin(aPosition.x * 0.5 + uTime * 0.3));
     }
 
     vLife = max(life, 0.0);
@@ -151,7 +156,28 @@ void main() {
         color = vec4(1.0, 0.8, 0.3, finalAlpha * glow);
     }
     else if(uEffectType == 4) {
-        color = vec4(1.0, 1.0, 1.0, finalAlpha * 0.2);
+        vec2 uv = gl_PointCoord - 0.5;
+        float d = length(uv);
+
+        // базовая форма точки
+        float core = exp(-d * d * 6.0);
+
+        // ВАЖНО: определяем "край"
+        float edge = smoothstep(0.35, 0.0, d);
+
+        // усиливаем край (чтобы он был ярче и крупнее)
+        float edgeGlow = (1.0 - core) * edge;
+
+        float alpha = finalAlpha * (core * 0.4 + edgeGlow * 0.9);
+
+        vec3 baseColor = vec3(1.0);
+
+        // края ярче и “воздушнее”
+        vec3 colorMix = baseColor + edgeGlow * vec3(0.2, 0.25, 0.3);
+        alpha *= 1.2;
+        alpha = clamp(alpha, 0.0, 1.0);
+
+        color = vec4(colorMix, alpha);
     }
     else if(uEffectType == 5) {
         color = vec4(1.0, 1.0, 1.0, finalAlpha * 0.2);
@@ -280,6 +306,30 @@ class ParticleSystem {
                 this.velocities[i*3+2] = Math.sin(spread) * Math.sin(angle) * speed;
 
                 this.lifes[i] = Math.random() * 1.2 + 0.8;
+            } else if(type === "clouds") {
+                // центр одного большого облака
+                const cx = -10 + Math.random() * 5; // старт слева (чуть за экраном)
+                const cy = 8.5;
+                const cz = 0;
+
+                // плотность облака (важно: "ком" через гауссиану)
+                const r = () => (Math.random() + Math.random() + Math.random()) / 3;
+
+                // вытягиваем облако в "каплю"
+                const x = (r() - 0.5) * 10;
+                const y = (r() - 0.5) * 4;
+                const z = (r() - 0.5) * 2;
+
+                this.positions[i*3+0] = cx + x;
+                this.positions[i*3+1] = cy + y;
+                this.positions[i*3+2] = cz + z;
+
+                // единое движение облака
+                this.velocities[i*3+0] = 0.35; // строго слева направо
+                this.velocities[i*3+1] = 0;
+                this.velocities[i*3+2] = 0;
+
+                this.lifes[i] = 9999;
             }
         }
     }
@@ -321,7 +371,7 @@ class ParticleSystem {
 }
 
 // ----------------- Инициализация -----------------
-const particleSystem = new ParticleSystem(100000);
+const particleSystem = new ParticleSystem(5000);
 particleSystem.initEffect("firework");
 particleSystem.updateBuffers();
 
