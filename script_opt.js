@@ -20,8 +20,9 @@ function createGraph(data, title) {
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, c.width, c.height);
 
-    const max = Math.max(...data);
-    const min = Math.min(...data);
+    // фиксированная шкала FPS
+    const min = 0;
+    const max = 60;
 
     ctx.strokeStyle = "white";
     ctx.beginPath();
@@ -33,19 +34,34 @@ function createGraph(data, title) {
     ctx.fillStyle = "white";
     ctx.fillText(title, 50, 30);
 
+    // подписи оси Y
+    ctx.fillText("60", 5, 25);
+    ctx.fillText("30", 5, 150);
+    ctx.fillText("0", 15, 285);
+
     ctx.strokeStyle = "lime";
     ctx.beginPath();
 
-    const w = 540, h = 240;
+    const w = 540;
+    const h = 240;
 
     for (let i = 0; i < data.length; i++) {
         const x = 40 + (i / data.length) * w;
-        const y = 280 - ((data[i] - min) / (max - min + 0.0001)) * h;
 
-        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        const value = Math.min(data[i], max);
+
+        const y =
+            280 -
+            ((value - min) / (max - min)) * h;
+
+        if (i === 0)
+            ctx.moveTo(x, y);
+        else
+            ctx.lineTo(x, y);
     }
 
     ctx.stroke();
+
     return c;
 }
 
@@ -113,6 +129,18 @@ for (let i = 0; i < COUNT; i++) {
 
 const quad = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
 
+const quadBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, quad, gl.STATIC_DRAW);
+
+const posBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, pos, gl.STATIC_DRAW);
+
+const velBuffer = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, velBuffer);
+gl.bufferData(gl.ARRAY_BUFFER, vel, gl.STATIC_DRAW);
+
 function buf(data, loc, size, div) {
     const b = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, b);
@@ -122,12 +150,76 @@ function buf(data, loc, size, div) {
     if (div !== undefined) gl.vertexAttribDivisor(loc, div);
 }
 
-buf(quad, 0, 2);
-buf(pos, 1, 3, 1);
-buf(vel, 2, 3, 1);
+const vaoBefore = gl.createVertexArray();
+gl.bindVertexArray(vaoBefore);
+
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+gl.bindVertexArray(null);
+
+const vaoAfter = gl.createVertexArray();
+gl.bindVertexArray(vaoAfter);
+
+gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+gl.bindBuffer(gl.ARRAY_BUFFER, posBuffer);
+gl.enableVertexAttribArray(1);
+gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+gl.vertexAttribDivisor(1, 1);
+
+gl.bindBuffer(gl.ARRAY_BUFFER, velBuffer);
+gl.enableVertexAttribArray(2);
+gl.vertexAttribPointer(2, 3, gl.FLOAT, false, 0, 0);
+gl.vertexAttribDivisor(2, 1);
+
+gl.bindVertexArray(null);
 
 const uTime = gl.getUniformLocation(prog, "uTime");
 const uProj = gl.getUniformLocation(prog, "uProj");
+
+function drawBefore(time)
+{
+    gl.uniformMatrix4fv(uProj, false, proj);
+
+    gl.bindVertexArray(vaoBefore);
+
+    for(let i = 0; i < COUNT; i++)
+    {
+        const px = pos[i*3+0];
+        const py = pos[i*3+1];
+        const pz = pos[i*3+2];
+
+        const vx = vel[i*3+0];
+        const vy = vel[i*3+1];
+        const vz = vel[i*3+2];
+
+        gl.vertexAttrib3f(1, px, py, pz);
+        gl.vertexAttrib3f(2, vx, vy, vz);
+
+        gl.uniform1f(uTime, time);
+
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    }
+}
+
+function drawAfter(time)
+{
+    gl.uniform1f(uTime, time);
+    gl.uniformMatrix4fv(uProj, false, proj);
+
+    gl.bindVertexArray(vaoAfter);
+
+    gl.drawArraysInstanced(
+        gl.TRIANGLE_STRIP,
+        0,
+        4,
+        COUNT
+    );
+}
 
 const proj = mat4.create();
 mat4.ortho(proj, -10, 10, -10, 10, -1, 1);
@@ -137,24 +229,25 @@ let fpsA = [], fpsB = [];
 
 let last = performance.now();
 let start = performance.now();
-const DURATION = 20000;
-
-function draw(time) {
-    gl.uniform1f(uTime, time);
-    gl.uniformMatrix4fv(uProj, false, proj);
-    gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, COUNT);
-}
+const DURATION = 8000;
 
 function loop() {
     const now = performance.now();
     const dt = (now - last) / 1000;
     last = now;
 
-    const fps = 1 / dt;
+    const fps = dt > 0 ? 1 / dt : 0;
 
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    draw(now * 0.001);
+    if(mode === "before")
+    {
+        drawBefore(now * 0.001);
+    }
+    else
+    {
+        drawAfter(now * 0.001);
+    }
 
     (mode === "before" ? fpsA : fpsB).push(fps);
 
@@ -163,6 +256,15 @@ function loop() {
             mode = "after";
             start = now;
         } else {
+            console.log(
+                "BEFORE avg FPS",
+                fpsA.reduce((a,b)=>a+b,0)/fpsA.length
+            );
+
+            console.log(
+                "AFTER avg FPS",
+                fpsB.reduce((a,b)=>a+b,0)/fpsB.length
+            );
             download(createGraph(fpsA, "BEFORE"), "before.png");
             download(createGraph(fpsB, "AFTER"), "after.png");
             return;
