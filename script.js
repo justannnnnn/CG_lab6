@@ -84,14 +84,21 @@ void main() {
         size = (2.0 + 2.0 * life) * (1.0 + trailFade);
     }
 
-    // CLOUDS
     else if(uEffectType == 4) {
+
         float t = uTime;
 
         pos.x += aVelocity.x * t;
-        pos.y += sin(aPosition.x * 0.2 + t * 0.5) * 0.3;
+        pos.y += sin(aPosition.x * 0.15 + t * 0.3) * 0.25;
+        float wobbleX = sin(aPosition.y * 0.8 + t * 0.6) * 0.15;
+        float wobbleY = cos(aPosition.x * 0.6 + t * 0.4) * 0.12;
 
-        size = 60.0 + 100.0 * (0.5 + 0.5 * sin(aPosition.x * 0.5 + uTime * 0.3));
+        pos.x += wobbleX;
+        pos.y += wobbleY;
+
+        size =
+            70.0 +
+            40.0 * (0.5 + 0.5 * sin(aPosition.x * 0.2 + t * 0.25));
     }
 
     vLife = max(life, 0.0);
@@ -146,23 +153,31 @@ void main() {
         float glow = 1.5;
         color = vec4(1.0, 0.8, 0.3, finalAlpha * glow);
     }
-    // CLOUDS
     else if(uEffectType == 4) {
         vec2 uv = gl_PointCoord - 0.5;
+
         float d = length(uv);
-        float core = exp(-d * d * 6.0);
 
-        float edge = smoothstep(0.35, 0.0, d);
+        float soft = smoothstep(0.6, 0.0, d);
+        float n1 = fract(sin(dot(uv * 3.0, vec2(12.9898, 78.233))) * 43758.5453);
+        float n2 = fract(sin(dot(uv * 6.0 + 10.0, vec2(39.346, 11.135))) * 91234.123);
 
-        float edgeGlow = (1.0 - core) * edge;
+        float noise = (n1 * 0.6 + n2 * 0.4);
 
-        float alpha = finalAlpha * (core * 0.4 + edgeGlow * 0.9);
+        float cloudShape =
+            soft *
+            (0.4 + 0.6 * noise) *
+            (1.0 - d * 0.8);
 
-        vec3 baseColor = vec3(1.0);
+        cloudShape = smoothstep(0.0, 1.0, cloudShape);
 
-        vec3 colorMix = baseColor + edgeGlow * vec3(0.2, 0.25, 0.3);
-        alpha *= 1.2;
-        alpha = clamp(alpha, 0.0, 1.0);
+        float edge = smoothstep(0.7, 0.0, d);
+
+        float alpha = finalAlpha * cloudShape * edge;
+
+        vec3 colorMix = vec3(1.0, 1.0, 1.0);
+
+        colorMix += noise * vec3(0.05, 0.06, 0.08);
 
         color = vec4(colorMix, alpha);
     }
@@ -241,7 +256,7 @@ class ParticleSystem {
         if(type === "clouds") {
             count = 3000;
         } else if(type === "rain") {
-            count = 40000;
+            count = 100000;
         } else if(type === "smoke") {
             count = 50000;
         } else if(type === "sparkler") {
@@ -301,7 +316,7 @@ class ParticleSystem {
                 this.velocities[i*3+2] = Math.sin(spread) * Math.sin(angle) * speed;
 
                 this.lifes[i] = Math.random() * 1.2 + 0.8;
-            } else if(type === "clouds") {а
+            } else if(type === "clouds") {
                 const cx = -10 + Math.random() * 5;
                 const cy = 8.5;
                 const cz = 0;
